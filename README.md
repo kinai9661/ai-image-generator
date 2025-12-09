@@ -1,20 +1,27 @@
-# 🎨 AI Image Generator
+# 🎨 Universal AI Image Generator
 
-> 基于环境变量配置的 AI 图像生成和聊天应用，支持自动更新模型列表，无需前端登入
+> 通用 AI 图像生成和聊天应用，支持多种 OpenAI 兼容 API，无需前端登入
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
-[![Together.ai](https://img.shields.io/badge/API-Together.ai-purple.svg)](https://api.together.xyz)
+[![OpenAI Compatible](https://img.shields.io/badge/API-OpenAI%20Compatible-green.svg)](https://platform.openai.com/docs/api-reference)
 
 ## ✨ 功能特性
 
-- ✅ **FLUX AI 图像生成**
-  - 支持多种 FLUX 模型（Schnell / Dev / Pro）
+- ✅ **多提供商支持**
+  - OpenAI (GPT-4, DALL-E 3)
+  - Together.ai (FLUX, Llama - 免费 $25/月)
+  - Groq (快速且免费)
+  - DeepSeek (低成本)
+  - 任何 OpenAI 兼容 API
+
+- 🎨 **AI 图像生成**
+  - 支持多种图像模型（DALL-E, FLUX, Stable Diffusion）
   - 多种尺寸比例（1:1, 3:2, 2:3, 16:9, 9:16）
-  - 高质量图像生成（20-40秒）
+  - 高质量图像生成
 
 - 🤖 **AI 聊天对话**
-  - 支持多种聊天模型（Llama / Mixtral / Qwen 等）
+  - 支持多种聊天模型（GPT-4, Llama, Mixtral, Qwen 等）
   - 实时对话交互
   - 智能上下文理解
 
@@ -22,7 +29,7 @@
   - 启动时自动获取最新模型列表
   - 每小时自动刷新
   - 手动刷新按钮
-  - 智能模型分类（按速度/提供商）
+  - 智能模型分类
 
 - 🖼️ **图片历史管理**
   - localStorage 本地存储
@@ -52,18 +59,42 @@ npm install
 cp .env.example .env
 ```
 
-编辑 `.env` 文件：
+编辑 `.env` 文件，选择一个 API 提供商：
+
+#### 选项 A: Together.ai（推荐 - 每月 $25 免费）
 
 ```env
-# Together.ai API 配置
-# 注册: https://api.together.xyz/settings/api-keys
-IMAGE_API_KEY=your_together_api_key_here
-CHAT_API_KEY=your_together_api_key_here
-
-PORT=3000
+IMAGE_API_KEY=your_together_api_key
+IMAGE_API_ENDPOINT=https://api.together.xyz/v1/images/generations
+CHAT_API_KEY=your_together_api_key
+CHAT_API_ENDPOINT=https://api.together.xyz/v1/chat/completions
+MODELS_API_ENDPOINT=https://api.together.xyz/v1/models
+API_PROVIDER=together
 ```
 
-> 🎁 **免费额度**：Together.ai 每月提供 $25 免费额度！
+🎁 注册: https://api.together.xyz/settings/api-keys
+
+#### 选项 B: OpenAI
+
+```env
+IMAGE_API_KEY=sk-...
+IMAGE_API_ENDPOINT=https://api.openai.com/v1/images/generations
+CHAT_API_KEY=sk-...
+CHAT_API_ENDPOINT=https://api.openai.com/v1/chat/completions
+MODELS_API_ENDPOINT=https://api.openai.com/v1/models
+API_PROVIDER=openai
+```
+
+#### 选项 C: Groq（仅聊天 - 免费）
+
+```env
+CHAT_API_KEY=your_groq_key
+CHAT_API_ENDPOINT=https://api.groq.com/openai/v1/chat/completions
+MODELS_API_ENDPOINT=https://api.groq.com/openai/v1/models
+API_PROVIDER=groq
+```
+
+💡 提示：可以混合使用（如 Together.ai 生成图片 + Groq 聊天）
 
 ### 3. 启动应用
 
@@ -83,30 +114,25 @@ npm start
 
 1. Fork 此仓库
 2. 在 [Zeabur](https://zeabur.com) 导入项目
-3. 添加环境变量：
-   - `IMAGE_API_KEY`
-   - `CHAT_API_KEY`
+3. 添加环境变量（根据你选择的提供商）
 4. 部署完成！
 
 ### Vercel 部署
 
 ```bash
-# 安装 Vercel CLI
 npm install -g vercel
-
-# 部署
 vercel
 ```
 
-或直接在 Vercel 控制台导入 GitHub 仓库。
+## 📦 支持的 API 提供商
 
-## 📦 技术栈
-
-- **后端**: Node.js + Express
-- **前端**: 原生 JavaScript（无框架）
-- **API**: Together.ai
-- **存储**: localStorage
-- **配置**: dotenv 环境变量
+| 提供商 | 图像生成 | 聊天 | 免费额度 | 特点 |
+|---------|--------|------|----------|------|
+| **Together.ai** | ✅ FLUX | ✅ Llama/Mixtral | $25/月 | 推荐，性价比高 |
+| **OpenAI** | ✅ DALL-E | ✅ GPT-4 | 无 | 最高质量 |
+| **Groq** | ❌ | ✅ Llama | 有 | 超快速度 |
+| **DeepSeek** | ❌ | ✅ DeepSeek | 有 | 低成本 |
+| **自定义** | ✅ | ✅ | - | OpenAI 兼容即可 |
 
 ## 📚 API 文档
 
@@ -138,10 +164,9 @@ vercel
 ```json
 {
   "prompt": "A beautiful sunset",
-  "model": "black-forest-labs/FLUX.1-schnell",
+  "model": "dall-e-3",
   "width": 1024,
-  "height": 1024,
-  "steps": 4
+  "height": 1024
 }
 ```
 
@@ -153,33 +178,33 @@ vercel
 ```json
 {
   "message": "Hello!",
-  "model": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+  "model": "gpt-4",
   "history": []
 }
 ```
 
 ## 🔧 高级配置
 
-### 使用其他 API 提供商
-
-在 `.env` 中修改：
+### 混合使用多个提供商
 
 ```env
-# OpenAI
-IMAGE_API_ENDPOINT=https://api.openai.com/v1/images/generations
-IMAGE_API_KEY=sk-...
+# Together.ai 生成图片（免费）
+IMAGE_API_KEY=together_key
+IMAGE_API_ENDPOINT=https://api.together.xyz/v1/images/generations
 
-# 自定义 API
-IMAGE_API_ENDPOINT=https://your-api.com/generate
-IMAGE_API_KEY=your_key
+# Groq 聊天（免费且快）
+CHAT_API_KEY=groq_key
+CHAT_API_ENDPOINT=https://api.groq.com/openai/v1/chat/completions
 ```
 
-### 修改模型缓存时间
+### 自定义 API 端点
 
-在 `server.js` 中修改：
+只要 API 遵循 OpenAI 格式，即可使用：
 
-```javascript
-const maxAge = 1000 * 60 * 60; // 1小时
+```env
+IMAGE_API_ENDPOINT=https://your-custom-api.com/v1/images/generations
+CHAT_API_ENDPOINT=https://your-custom-api.com/v1/chat/completions
+MODELS_API_ENDPOINT=https://your-custom-api.com/v1/models
 ```
 
 ## 🐛 常见问题
@@ -188,37 +213,39 @@ const maxAge = 1000 * 60 * 60; // 1小时
 
 A: 请检查：
 1. 环境变量 `IMAGE_API_KEY` 是否配置正确
-2. API 余额是否充足
-3. 网络连接是否正常
-4. 查看控制台错误信息
+2. `IMAGE_API_ENDPOINT` 是否正确
+3. API 余额是否充足
+4. 网络连接是否正常
+5. 查看控制台错误信息
 
-### Q: 如何获取 Together.ai API Key？
+### Q: 如何获取免费 API Key？
 
 A: 
-1. 注册 [Together.ai](https://api.together.xyz)
-2. 进入 [API Keys](https://api.together.xyz/settings/api-keys)
-3. 创建新的 API Key
-4. 复制并粘贴到 `.env` 文件
+- **Together.ai**: https://api.together.xyz (每月 $25 免费)
+- **Groq**: https://console.groq.com (免费层)
+- **DeepSeek**: https://platform.deepseek.com (低成本)
 
 ### Q: 模型列表不更新怎么办？
 
 A: 
 1. 点击右上角“刷新模型”按钮
 2. 或访问 `/api/models?refresh=true`
-3. 重启服务器
+3. 检查 `MODELS_API_ENDPOINT` 配置
+4. 重启服务器
 
-## 📸 截图预览
+### Q: 可以同时使用多个 API 吗？
 
-### 主界面
-- 🎨 FLUX 图像生成
+A: 可以！你可以：
+- 使用 Together.ai 生成图片（免费）
+- 使用 Groq 进行聊天（快且免费）
+- 混合任意提供商
+
+## 📸 功能截图
+
+- 🎨 多模型图像生成
 - 🤖 AI 聊天助手
 - 🖼️ 图片历史管理
-
-### 功能特点
-- ✅ 自动获取最新模型
-- ✅ 多种尺寸支持
-- ✅ 本地历史记录
-- ✅ 无需登入
+- 🔄 自动模型更新
 
 ## 📝 项目结构
 
@@ -238,9 +265,10 @@ ai-image-generator/
 ## 🔗 相关链接
 
 - [💻 GitHub 仓库](https://github.com/kinai9661/ai-image-generator)
-- [📚 Together.ai 文档](https://docs.together.ai)
-- [⚡ FLUX 模型介绍](https://blackforestlabs.ai/flux-1-tools/)
-- [🚀 Zeabur 文档](https://zeabur.com/docs)
+- [📚 OpenAI API 文档](https://platform.openai.com/docs/api-reference)
+- [⚡ Together.ai](https://api.together.xyz)
+- [🚀 Groq](https://console.groq.com)
+- [🚀 Zeabur](https://zeabur.com/docs)
 
 ## 📝 License
 
