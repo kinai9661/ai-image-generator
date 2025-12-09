@@ -95,7 +95,7 @@ vercel
 - ⏱️ 运行时间  
 - 💰 预估费用 (Zeabur Free Tier)
 
-### 🧪 测试 API
+### 🧑‍💻 测试 API
 
 ```bash
 # 测试聊天
@@ -178,35 +178,45 @@ API_PROVIDER=groq
 
 ## 🐛 常见问题
 
+> 📚 **遇到问题？** 查看详细的 [🔧 故障排查指南](TROUBLESHOOTING.md)
+
 ### Q: 为什么聊天失败？
 
 A: 请检查：
 1. API 端点 `https://fluxes.zeabur.app` 是否可访问
-2. 查看浏览器控制台错误信息
+2. 查看浏览器控制台错误信息 (F12)
 3. 确认 `CHAT_API_KEY=1` 配置正确
 4. 访问 https://fluxes.zeabur.app 检查 API 状态
 
-### Q: 如何查看可用模型？
+➡️ [查看完整解决方法](TROUBLESHOOTING.md#1-聊天功能错误)
+
+### Q: 图像生成失败？
 
 A: 
-1. 启动应用后，模型会自动加载
-2. 或者访问：`curl https://fluxes.zeabur.app/v1/models -H "Authorization: Bearer 1"`
-3. 点击右上角“刷新模型”按钮
+- Typli API Server 可能不支持图像生成
+- 可以添加 Together.ai 来支持图像功能
 
-### Q: 支持图像生成吗？
+➡️ [查看配置步骤](TROUBLESHOOTING.md#2-图像生成错误)
+
+### Q: 错误: "Access to storage is not allowed"
 
 A: 
-- 如果你的 Typli API Server 支持 `/v1/images/generations`，则可以使用
-- 否则只支持聊天功能
-- 可以添加 Together.ai 来支持图像生成
+- localStorage 访问被禁止
+- 应用已自动切换到内存模式
+- 部署到 Zeabur 后使用 HTTPS 可解决
 
-### Q: 如何更改 API 端点？
+➡️ [查看详细解决](TROUBLESHOOTING.md#3-localstorage-错误)
 
-A: 修改 `.env` 文件中的：
-```env
-CHAT_API_ENDPOINT=https://your-api.zeabur.app/v1/chat/completions
-MODELS_API_ENDPOINT=https://your-api.zeabur.app/v1/models
-```
+### Q: 模型列表为空？
+
+A:
+1. 点击右上角“刷新模型”按钮
+2. 检查控制台错误信息
+3. 验证 API 端点：`curl https://fluxes.zeabur.app/v1/models -H "Authorization: Bearer 1"`
+
+➡️ [查看调试步骤](TROUBLESHOOTING.md#4-模型列表为空)
+
+---
 
 ## 📸 功能截图
 
@@ -220,19 +230,21 @@ MODELS_API_ENDPOINT=https://your-api.zeabur.app/v1/models
 ```
 ai-image-generator/
 ├── public/
-│   ├── index.html       # 前端页面
-│   ├── style.css        # 样式文件
-│   └── app.js           # 前端逻辑
-├── server.js            # 后端服务器
-├── package.json         # 项目配置
-├── .env.example         # 环境变量模板
-├── zbpack.json          # Zeabur 配置
-└── README.md            # 项目文档
+│   ├── index.html          # 前端页面
+│   ├── style.css           # 样式文件
+│   └── app.js              # 前端逻辑
+├── server.js               # 后端服务器
+├── package.json            # 项目配置
+├── .env.example            # 环境变量模板
+├── zbpack.json             # Zeabur 配置
+├── TROUBLESHOOTING.md      # 故障排查指南
+└── README.md               # 项目文档
 ```
 
 ## 🔗 相关链接
 
 - [💻 GitHub 仓库](https://github.com/kinai9661/ai-image-generator)
+- [🔧 故障排查指南](TROUBLESHOOTING.md)
 - [🚀 Typli API Server](https://fluxes.zeabur.app)
 - [📚 OpenAI API 文档](https://platform.openai.com/docs/api-reference)
 - [🚀 Zeabur](https://zeabur.com/docs)
@@ -244,6 +256,7 @@ ai-image-generator/
 - ✅ **自动更新** - 模型列表自动同步
 - ✅ **多模型支持** - Grok, Llama, Mixtral 等
 - ✅ **开箱即用** - 克隆即用，无需修改
+- ✅ **故障排查** - 完整的问题解决指南
 
 ## 📝 License
 
