@@ -63,32 +63,38 @@ async function checkApiConfig() {
 async function callImageApi(prompt, model, width, height) {
     try {
         console.log('🎨 调用图像生成 API...');
+        debugLog('图像生成参数', { prompt, model, width, height });
         
         const response = await fetch('/api/generate-image', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt, model, width, height, steps: 4 })
+            body: JSON.stringify({ prompt, model, width, height })
         });
 
+        const data = await response.json();
+        debugLog('API 响应', data);
+
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || '图像生成失败');
+            throw new Error(data.error || `HTTP ${response.status}: 图像生成失败`);
         }
 
-        const data = await response.json();
-        console.log('✅ 图像生成成功');
+        if (!data.success) {
+            throw new Error(data.error || '图像生成失败');
+        }
         
-        if (data.success && data.data && data.data[0]) {
+        if (data.data && data.data[0]) {
             const imageData = data.data[0];
-            // Together.ai 返回 b64_json 或 url
+            // 支持多种响应格式
             if (imageData.b64_json) {
                 return `data:image/png;base64,${imageData.b64_json}`;
             } else if (imageData.url) {
                 return imageData.url;
+            } else if (typeof imageData === 'string') {
+                return imageData;
             }
         }
         
-        throw new Error('无效的响应格式');
+        throw new Error('无法解析图像数据');
     } catch (error) {
         console.error('❌ 图像生成失败:', error);
         throw error;
@@ -99,6 +105,7 @@ async function callImageApi(prompt, model, width, height) {
 async function callChatApi(message, model) {
     try {
         console.log('💬 调用聊天 API...');
+        debugLog('聊天参数', { message, model });
         
         const response = await fetch('/api/chat', {
             method: 'POST',
@@ -106,19 +113,34 @@ async function callChatApi(message, model) {
             body: JSON.stringify({ message, model })
         });
 
+        const data = await response.json();
+        debugLog('API 响应', data);
+
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || '聊天失败');
+            throw new Error(data.error || `HTTP ${response.status}: 聊天失败`);
         }
 
-        const data = await response.json();
-        console.log('✅ 聊天响应成功');
-        
-        if (data.success && data.data.choices && data.data.choices[0]) {
-            return data.data.choices[0].message.content;
+        if (!data.success) {
+            throw new Error(data.error || '聊天失败');
         }
         
-        throw new Error('无效的响应格式');
+        // 支持多种响应格式
+        if (data.data) {
+            // OpenAI 格式
+            if (data.data.choices && data.data.choices[0] && data.data.choices[0].message) {
+                return data.data.choices[0].message.content;
+            }
+            // 简单格式
+            if (data.data.content) {
+                return data.data.content;
+            }
+            // 直接返回文本
+            if (typeof data.data === 'string') {
+                return data.data;
+            }
+        }
+        
+        throw new Error('无法解析聊天响应');
     } catch (error) {
         console.error('❌ 聊天失败:', error);
         throw error;
@@ -158,10 +180,6 @@ async function loadModels(forceRefresh = false) {
         });
 
         updateModelSelects();
-        
-        const updateTime = availableModels.lastUpdate 
-            ? new Date(availableModels.lastUpdate).toLocaleString('zh-TW')
-            : '刚刚';
         
         showNotification(
             `✅ 模型已更新 (${availableModels.image.length}个图像, ${availableModels.chat.length}个聊天)`,
@@ -222,16 +240,18 @@ function updateModelSelects() {
         const providerGroups = {};
         availableModels.chat.forEach(m => {
             let provider = 'Other';
-            if (m.name.includes('Llama')) provider = 'Meta';
-            else if (m.name.includes('Mixtral')) provider = 'Mistral';
-            else if (m.name.includes('Qwen')) provider = 'Alibaba';
-            else if (m.name.includes('DeepSeek')) provider = 'DeepSeek';
+            if (m.name.includes('Llama') || m.name.includes('llama')) provider = 'Meta';
+            else if (m.name.includes('Mixtral') || m.name.includes('Mistral')) provider = 'Mistral';
+            else if (m.name.includes('Qwen') || m.name.includes('qwen')) provider = 'Alibaba';
+            else if (m.name.includes('DeepSeek') || m.name.includes('deepseek')) provider = 'DeepSeek';
+            else if (m.name.includes('Grok') || m.name.includes('grok')) provider = 'xAI';
             
             if (!providerGroups[provider]) providerGroups[provider] = [];
             providerGroups[provider].push(m);
         });
 
         const providerIcons = {
+            'xAI': '⚡',
             'Meta': '🦙',
             'Mistral': '🔮',
             'Alibaba': '🇨🇳',
@@ -272,7 +292,7 @@ function isLocalStorageAvailable() {
         localStorage.removeItem(test);
         return true;
     } catch (e) {
-        console.warn('⚠️ localStorage 不可用');
+        console.warn('⚠️ localStorage 不可用:', e.message);
         return false;
     }
 }
@@ -286,7 +306,10 @@ class ImageHistory {
     }
 
     loadHistory() {
-        if (!USE_LOCAL_STORAGE) return this.memoryHistory;
+        if (!USE_LOCAL_STORAGE) {
+            console.log('⚠️ 使用内存存储模式');
+            return this.memoryHistory;
+        }
         try {
             const data = localStorage.getItem(HISTORY_KEY);
             const loaded = data ? JSON.parse(data) : [];
@@ -294,18 +317,31 @@ class ImageHistory {
             console.log(`💾 载入 ${loaded.length} 笔记录`);
             return loaded;
         } catch (error) {
-            console.warn('⚠️ 载入记录失败:', error);
+            console.warn('⚠️ 载入记录失败:', error.message);
             return this.memoryHistory;
         }
     }
 
     saveHistory() {
-        if (!USE_LOCAL_STORAGE) return;
+        if (!USE_LOCAL_STORAGE) {
+            console.log('💾 内存模式 - 不保存到 localStorage');
+            return;
+        }
         try {
             localStorage.setItem(HISTORY_KEY, JSON.stringify(this.history));
             console.log('✅ 记录已保存');
         } catch (error) {
-            console.error('❌ 保存失败:', error);
+            console.error('❌ 保存失败:', error.message);
+            if (error.name === 'QuotaExceededError') {
+                // 存储空间不足，删除一半旧记录
+                this.history = this.history.slice(0, Math.floor(this.history.length / 2));
+                try {
+                    localStorage.setItem(HISTORY_KEY, JSON.stringify(this.history));
+                    console.log('✅ 清理后保存成功');
+                } catch (e) {
+                    console.error('❌ 仍然无法保存:', e.message);
+                }
+            }
         }
     }
 
@@ -512,6 +548,7 @@ async function generateImage() {
                         <li>确认 API 余额充足</li>
                         <li>尝试简化提示词</li>
                         <li>检查网络连接</li>
+                        <li>查看浏览器控制台获取详细错误</li>
                     </ul>
                 </div>
             </div>
@@ -573,8 +610,10 @@ function openImageModal(imageData, prompt, modelName, aspectRatio) {
 // ==================== 历史记录渲染 ====================
 function renderHistory() {
     const history = imageHistory.history;
-    totalCountEl.textContent = history.length;
-    storageSizeEl.textContent = `${imageHistory.getStorageSize()} KB`;
+    if (totalCountEl) totalCountEl.textContent = history.length;
+    if (storageSizeEl) storageSizeEl.textContent = `${imageHistory.getStorageSize()} KB`;
+
+    if (!historyGrid) return;
 
     if (history.length === 0) {
         historyGrid.innerHTML = `
@@ -647,20 +686,20 @@ function renderHistory() {
 }
 
 // ==================== 事件监听器 ====================
-sendBtn.addEventListener('click', sendMessage);
-chatInput.addEventListener('keypress', (e) => {
+if (sendBtn) sendBtn.addEventListener('click', sendMessage);
+if (chatInput) chatInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') sendMessage();
 });
 
-generateImgBtn.addEventListener('click', generateImage);
-imagePrompt.addEventListener('keypress', (e) => {
+if (generateImgBtn) generateImgBtn.addEventListener('click', generateImage);
+if (imagePrompt) imagePrompt.addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         generateImage();
     }
 });
 
-clearHistoryBtn.addEventListener('click', () => {
+if (clearHistoryBtn) clearHistoryBtn.addEventListener('click', () => {
     if (confirm('确定要清空所有图片记录吗?此操作无法撤销!')) {
         imageHistory.clearAll();
         renderHistory();
@@ -682,16 +721,23 @@ if (refreshModelsBtn) {
 // ==================== 初始化 ====================
 async function initialize() {
     console.log('🚀 ===== 应用初始化开始 =====');
+    console.log('🌍 当前时间:', new Date().toLocaleString('zh-TW'));
+    console.log('💾 localStorage:', USE_LOCAL_STORAGE ? '可用' : '不可用 (使用内存)');
     
     const config = await checkApiConfig();
     
     if (!config.hasImageApi) {
         console.warn('⚠️ 图像生成 API 未配置');
-        showNotification('⚠️ 请配置环境变量 IMAGE_API_KEY', 'warning');
+        if (imageModelSelect) imageModelSelect.disabled = true;
+        if (generateImgBtn) generateImgBtn.disabled = true;
+        if (imageResult) imageResult.innerHTML = '<p class="error">⚠️ 图像生成 API 未配置，请设置 IMAGE_API_KEY</p>';
     }
     
     if (!config.hasChatApi) {
         console.warn('⚠️ 聊天 API 未配置');
+        if (modelSelect) modelSelect.disabled = true;
+        if (sendBtn) sendBtn.disabled = true;
+        if (chatMessages) chatMessages.innerHTML = '<div class="message ai-message">⚠️ 聊天 API 未配置，请设置 CHAT_API_KEY</div>';
     }
     
     await loadModels();
