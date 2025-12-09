@@ -17,72 +17,46 @@ app.use((req, res, next) => {
 
 // ==================== 模型配置管理 ====================
 
-// 默认模型配置（如果无法从 API 获取）
+// 默认模型配置（通用）
 const DEFAULT_MODELS = {
   image: [
     {
-      id: 'black-forest-labs/FLUX.1-schnell',
-      name: 'FLUX.1 Schnell',
-      description: '⚡ 超快速生成，4步完成',
-      provider: 'together',
-      maxWidth: 2048,
-      maxHeight: 2048,
-      free: true,
-      speed: 'fast'
-    },
-    {
-      id: 'black-forest-labs/FLUX.1-dev',
-      name: 'FLUX.1 Dev',
-      description: '🔧 开发版本，平衡质量和速度',
-      provider: 'together',
-      maxWidth: 2048,
-      maxHeight: 2048,
-      free: true,
+      id: 'dall-e-3',
+      name: 'DALL-E 3',
+      description: '🎨 OpenAI 最新图像模型',
+      provider: 'openai',
+      maxWidth: 1024,
+      maxHeight: 1024,
+      free: false,
       speed: 'medium'
     },
     {
-      id: 'black-forest-labs/FLUX.1.1-pro',
-      name: 'FLUX.1.1 Pro',
-      description: '🏆 专业级最高品质',
-      provider: 'together',
-      maxWidth: 2048,
-      maxHeight: 2048,
+      id: 'dall-e-2',
+      name: 'DALL-E 2',
+      description: '⚡ 快速图像生成',
+      provider: 'openai',
+      maxWidth: 1024,
+      maxHeight: 1024,
       free: false,
-      speed: 'slow'
+      speed: 'fast'
     }
   ],
   chat: [
     {
-      id: 'meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo',
-      name: 'Llama 3.1 405B',
-      description: '🦙 Meta 最强开源模型',
-      provider: 'together',
-      contextWindow: 32768,
-      free: true
+      id: 'gpt-4',
+      name: 'GPT-4',
+      description: '🤖 OpenAI 最强模型',
+      provider: 'openai',
+      contextWindow: 8192,
+      free: false
     },
     {
-      id: 'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo',
-      name: 'Llama 3.1 70B',
-      description: '⚡ 快速响应，高质量',
-      provider: 'together',
-      contextWindow: 32768,
-      free: true
-    },
-    {
-      id: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
-      name: 'Mixtral 8x7B',
-      description: '🔮 Mistral MoE 模型',
-      provider: 'together',
-      contextWindow: 32768,
-      free: true
-    },
-    {
-      id: 'Qwen/Qwen2.5-72B-Instruct-Turbo',
-      name: 'Qwen 2.5 72B',
-      description: '🇨🇳 阿里最新模型',
-      provider: 'together',
-      contextWindow: 32768,
-      free: true
+      id: 'gpt-3.5-turbo',
+      name: 'GPT-3.5 Turbo',
+      description: '⚡ 快速响应',
+      provider: 'openai',
+      contextWindow: 4096,
+      free: false
     }
   ]
 };
@@ -94,46 +68,71 @@ let modelCache = {
   lastUpdate: null
 };
 
-// 从 Together.ai 获取最新模型列表
-async function fetchTogetherModels() {
+// 从 API 端点获取模型列表（支持 OpenAI 兼容的 /v1/models 端点）
+async function fetchModelsFromApi() {
   try {
-    console.log('🔄 正在从 Together.ai 获取最新模型列表...');
+    // 检查是否配置了模型 API 端点
+    const modelsEndpoint = process.env.MODELS_API_ENDPOINT;
     
-    const response = await axios.get('https://api.together.xyz/v1/models', {
+    if (!modelsEndpoint) {
+      console.log('⚠️ 未配置 MODELS_API_ENDPOINT，使用默认模型列表');
+      return {
+        imageModels: DEFAULT_MODELS.image,
+        chatModels: DEFAULT_MODELS.chat
+      };
+    }
+
+    console.log(`🔄 正在从 ${modelsEndpoint} 获取模型列表...`);
+    
+    const apiKey = process.env.IMAGE_API_KEY || process.env.CHAT_API_KEY;
+    if (!apiKey) {
+      console.log('⚠️ 未配置 API KEY，使用默认模型列表');
+      return {
+        imageModels: DEFAULT_MODELS.image,
+        chatModels: DEFAULT_MODELS.chat
+      };
+    }
+
+    const response = await axios.get(modelsEndpoint, {
       headers: {
-        'Authorization': `Bearer ${process.env.IMAGE_API_KEY || process.env.CHAT_API_KEY}`
+        'Authorization': `Bearer ${apiKey}`
       },
       timeout: 10000
     });
 
-    const models = response.data;
+    const models = response.data.data || response.data;
     console.log(`✅ 获取到 ${models.length} 个模型`);
 
-    // 分类模型
+    // 分类模型（根据 id 或 type 字段）
     const imageModels = models
-      .filter(m => m.type === 'image' && m.display_name.includes('FLUX'))
+      .filter(m => 
+        (m.id && (m.id.includes('dall-e') || m.id.includes('flux') || m.id.includes('stable-diffusion'))) ||
+        (m.type === 'image')
+      )
       .map(m => ({
         id: m.id,
-        name: m.display_name,
-        description: m.description || getModelDescription(m.display_name),
-        provider: 'together',
-        maxWidth: m.config?.max_width || 2048,
-        maxHeight: m.config?.max_height || 2048,
-        free: !m.pricing || m.pricing.input === 0,
-        speed: getModelSpeed(m.display_name)
+        name: m.name || m.display_name || m.id,
+        description: m.description || getModelDescription(m.id),
+        provider: detectProvider(m.id),
+        maxWidth: 2048,
+        maxHeight: 2048,
+        free: false,
+        speed: getModelSpeed(m.id)
       }))
       .slice(0, 10);
 
     const chatModels = models
-      .filter(m => m.type === 'chat' && !m.id.includes('moderation'))
-      .sort((a, b) => (b.context_length || 0) - (a.context_length || 0))
+      .filter(m => 
+        (m.id && (m.id.includes('gpt') || m.id.includes('llama') || m.id.includes('claude') || m.id.includes('qwen'))) ||
+        (m.type === 'chat' || m.type === 'text')
+      )
       .map(m => ({
         id: m.id,
-        name: m.display_name,
-        description: m.description || getModelDescription(m.display_name),
-        provider: 'together',
+        name: m.name || m.display_name || m.id,
+        description: m.description || getModelDescription(m.id),
+        provider: detectProvider(m.id),
         contextWindow: m.context_length || 4096,
-        free: !m.pricing || m.pricing.input === 0
+        free: false
       }))
       .slice(0, 15);
 
@@ -145,7 +144,7 @@ async function fetchTogetherModels() {
     
     return { imageModels, chatModels };
   } catch (error) {
-    console.error('❌ 获取 Together.ai 模型列表失败:', error.message);
+    console.error('❌ 获取模型列表失败:', error.message);
     console.log('⚠️ 使用默认模型配置');
     return {
       imageModels: DEFAULT_MODELS.image,
@@ -154,23 +153,46 @@ async function fetchTogetherModels() {
   }
 }
 
+function detectProvider(modelId) {
+  if (!modelId) return 'unknown';
+  const id = modelId.toLowerCase();
+  if (id.includes('gpt') || id.includes('dall-e')) return 'openai';
+  if (id.includes('claude')) return 'anthropic';
+  if (id.includes('llama')) return 'meta';
+  if (id.includes('mixtral') || id.includes('mistral')) return 'mistral';
+  if (id.includes('qwen')) return 'alibaba';
+  if (id.includes('flux')) return 'black-forest-labs';
+  if (id.includes('stable-diffusion')) return 'stability';
+  return 'custom';
+}
+
 function getModelDescription(name) {
-  if (name.includes('FLUX')) {
-    if (name.includes('schnell')) return '⚡ 超快速生成，4步完成';
-    if (name.includes('dev')) return '🔧 开发版本，平衡质量和速度';
-    if (name.includes('pro')) return '🏆 专业级最高品质';
+  if (!name) return '🤖 AI 模型';
+  const n = name.toLowerCase();
+  if (n.includes('gpt-4')) return '🤖 OpenAI 最强模型';
+  if (n.includes('gpt-3.5')) return '⚡ 快速响应';
+  if (n.includes('dall-e-3')) return '🎨 高质量图像生成';
+  if (n.includes('dall-e-2')) return '⚡ 快速图像生成';
+  if (n.includes('flux')) {
+    if (n.includes('schnell')) return '⚡ 超快速生成';
+    if (n.includes('dev')) return '🔧 开发版本';
+    if (n.includes('pro')) return '🏆 专业级品质';
+    return '🎨 FLUX 图像模型';
   }
-  if (name.includes('Llama')) return '🦙 Meta 开源大语言模型';
-  if (name.includes('Mixtral')) return '🔮 Mistral MoE 模型';
-  if (name.includes('Qwen')) return '🇨🇳 阿里巴巴 Qwen 模型';
-  if (name.includes('DeepSeek')) return '🤖 DeepSeek 深度学习模型';
-  return '🤖 高性能 AI 模型';
+  if (n.includes('llama')) return '🦙 Meta 开源模型';
+  if (n.includes('claude')) return '🤖 Anthropic Claude';
+  if (n.includes('qwen')) return '🇨🇳 阿里巴巴 Qwen';
+  if (n.includes('mixtral')) return '🔮 Mistral MoE';
+  return '🤖 AI 模型';
 }
 
 function getModelSpeed(name) {
-  if (name.includes('schnell') || name.includes('turbo')) return 'fast';
-  if (name.includes('dev')) return 'medium';
-  if (name.includes('pro')) return 'slow';
+  if (!name) return 'medium';
+  const n = name.toLowerCase();
+  if (n.includes('schnell') || n.includes('turbo') || n.includes('fast')) return 'fast';
+  if (n.includes('dall-e-2') || n.includes('gpt-3.5')) return 'fast';
+  if (n.includes('dev') || n.includes('base')) return 'medium';
+  if (n.includes('pro') || n.includes('gpt-4') || n.includes('claude')) return 'slow';
   return 'medium';
 }
 
@@ -179,11 +201,11 @@ function getModelSpeed(name) {
 app.get('/api/models', async (req, res) => {
   try {
     const forceRefresh = req.query.refresh === 'true';
-    const maxAge = 1000 * 60 * 60;
+    const maxAge = 1000 * 60 * 60; // 1小时缓存
     
     if (forceRefresh || !modelCache.lastUpdate || 
         (Date.now() - new Date(modelCache.lastUpdate).getTime() > maxAge)) {
-      await fetchTogetherModels();
+      await fetchModelsFromApi();
     }
 
     res.json({
@@ -211,83 +233,131 @@ app.get('/api/config', (req, res) => {
   res.json({
     hasImageApi: !!process.env.IMAGE_API_KEY,
     hasChatApi: !!process.env.CHAT_API_KEY,
-    provider: 'together',
+    provider: process.env.API_PROVIDER || 'generic',
     features: {
-      autoUpdateModels: true,
-      batchGeneration: true,
+      autoUpdateModels: !!process.env.MODELS_API_ENDPOINT,
+      batchGeneration: false,
       historyStorage: true
     }
   });
 });
 
+// 图像生成 API 代理（支持 OpenAI 兼容格式）
 app.post('/api/generate-image', async (req, res) => {
   try {
-    const { prompt, model, width, height, steps } = req.body;
+    const { prompt, model, width, height } = req.body;
     
     if (!process.env.IMAGE_API_KEY) {
-      return res.status(500).json({ error: '未配置 IMAGE_API_KEY' });
+      return res.status(500).json({ 
+        success: false,
+        error: '未配置 IMAGE_API_KEY' 
+      });
     }
 
-    const response = await axios.post(
-      process.env.IMAGE_API_ENDPOINT || 'https://api.together.xyz/v1/images/generations',
-      {
-        model: model || 'black-forest-labs/FLUX.1-schnell',
-        prompt,
-        width: width || 1024,
-        height: height || 1024,
-        steps: steps || 4,
-        n: 1,
-        response_format: 'b64_json'
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.IMAGE_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 120000
-      }
-    );
+    console.log(`🎨 图像生成请求: ${prompt.substring(0, 50)}...`);
 
-    res.json({ success: true, data: response.data.data });
+    // 默认使用 OpenAI 格式
+    const endpoint = process.env.IMAGE_API_ENDPOINT || 'https://api.openai.com/v1/images/generations';
+    
+    // 构建请求体（OpenAI 兼容格式）
+    const requestBody = {
+      prompt,
+      model: model || 'dall-e-3',
+      n: 1,
+      size: `${width || 1024}x${height || 1024}`,
+      response_format: 'b64_json'
+    };
+
+    const response = await axios.post(endpoint, requestBody, {
+      headers: {
+        'Authorization': `Bearer ${process.env.IMAGE_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: 120000
+    });
+
+    console.log('✅ 图像生成成功');
+    res.json({ 
+      success: true, 
+      data: response.data.data 
+    });
+
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    console.error('❌ 图像生成失败:', error.message);
+    
+    let errorMessage = '图像生成失败';
+    if (error.response?.data?.error) {
+      errorMessage = error.response.data.error.message || error.response.data.error;
+    } else if (error.code === 'ECONNABORTED') {
+      errorMessage = '请求超时，请重试';
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+
+    res.status(error.response?.status || 500).json({ 
+      success: false,
+      error: errorMessage
+    });
   }
 });
 
+// AI 聊天 API 代理（支持 OpenAI 兼容格式）
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, model, history } = req.body;
 
     if (!process.env.CHAT_API_KEY) {
-      return res.status(500).json({ error: '未配置 CHAT_API_KEY' });
+      return res.status(500).json({ 
+        success: false,
+        error: '未配置 CHAT_API_KEY' 
+      });
     }
 
+    console.log(`💬 聊天请求: ${message.substring(0, 50)}...`);
+
+    // 默认使用 OpenAI 格式
+    const endpoint = process.env.CHAT_API_ENDPOINT || 'https://api.openai.com/v1/chat/completions';
+    
+    // 构建消息历史
     const messages = [
       { role: 'system', content: '你是一个有帮助的 AI 助手。' },
       ...(history || []),
       { role: 'user', content: message }
     ];
 
-    const response = await axios.post(
-      process.env.CHAT_API_ENDPOINT || 'https://api.together.xyz/v1/chat/completions',
-      {
-        model: model || 'meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo',
-        messages,
-        temperature: 0.7,
-        max_tokens: 2048
+    const response = await axios.post(endpoint, {
+      model: model || 'gpt-3.5-turbo',
+      messages,
+      temperature: 0.7,
+      max_tokens: 2048
+    }, {
+      headers: {
+        'Authorization': `Bearer ${process.env.CHAT_API_KEY}`,
+        'Content-Type': 'application/json'
       },
-      {
-        headers: {
-          'Authorization': `Bearer ${process.env.CHAT_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 60000
-      }
-    );
+      timeout: 60000
+    });
 
-    res.json({ success: true, data: response.data });
+    console.log('✅ 聊天响应成功');
+    res.json({
+      success: true,
+      data: response.data
+    });
+
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    console.error('❌ 聊天失败:', error.message);
+    
+    let errorMessage = '聊天失败';
+    if (error.response?.data?.error) {
+      errorMessage = error.response.data.error.message || error.response.data.error;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+
+    res.status(error.response?.status || 500).json({ 
+      success: false,
+      error: errorMessage
+    });
   }
 });
 
@@ -299,6 +369,11 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok',
     timestamp: new Date().toISOString(),
+    config: {
+      hasImageApi: !!process.env.IMAGE_API_KEY,
+      hasChatApi: !!process.env.CHAT_API_KEY,
+      provider: process.env.API_PROVIDER || 'generic'
+    },
     models: {
       imageCount: modelCache.image.length,
       chatCount: modelCache.chat.length,
@@ -307,18 +382,27 @@ app.get('/health', (req, res) => {
   });
 });
 
+// ==================== 启动服务器 ====================
 const PORT = process.env.PORT || 3000;
 
-fetchTogetherModels().then(() => {
+// 启动时尝试加载模型列表（如果配置了）
+fetchModelsFromApi().then(() => {
   app.listen(PORT, () => {
     console.log('🚀 ========================================');
     console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`🎨 Image Models: ${modelCache.image.length}`);
+    console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🎨 Image API: ${process.env.IMAGE_API_KEY ? '✅ Configured' : '❌ Not configured'}`);
+    console.log(`💬 Chat API: ${process.env.CHAT_API_KEY ? '✅ Configured' : '❌ Not configured'}`);
+    console.log(`🤖 Image Models: ${modelCache.image.length}`);
     console.log(`💬 Chat Models: ${modelCache.chat.length}`);
     console.log('🚀 ========================================');
   });
 });
 
-setInterval(() => {
-  fetchTogetherModels();
-}, 1000 * 60 * 60);
+// 定期更新模型列表（每小时）
+if (process.env.MODELS_API_ENDPOINT) {
+  setInterval(() => {
+    console.log('🔄 定期更新模型列表...');
+    fetchModelsFromApi();
+  }, 1000 * 60 * 60);
+}
